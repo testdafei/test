@@ -1,0 +1,2 @@
+- name: opod service check
+  include: service.yaml

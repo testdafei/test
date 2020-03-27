@@ -1,0 +1,5 @@
+---
+- hosts: opod
+  gather_facts: false
+  roles:
+  - opod_service_check

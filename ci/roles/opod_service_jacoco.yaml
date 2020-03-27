@@ -1,0 +1,70 @@
+---
+- hosts: opod
+  tasks:
+    - name: collect jacoco data1,2
+      shell: /home/linuxadmin/opod/opod_runtime/shared/external_module/jdk/jdk_1.8/bin/java -jar /home/linuxadmin/opod/jacoco/lib/jacococli.jar dump --destfile /home/linuxadmin/opod/opod_runtime/jacoco_api_service.exec --port 6300;/home/linuxadmin/opod/opod_runtime/shared/external_module/jdk/jdk_1.8/bin/java -jar /home/linuxadmin/opod/jacoco/lib/jacococli.jar dump --destfile /home/linuxadmin/opod/opod_runtime/jacoco_api_gateway.exec --port 8044
+      ignore_errors: yes
+
+    - name: collect jacoco data3
+      shell: /home/linuxadmin/opod/opod_runtime/shared/external_module/jdk/jdk_1.8/bin/java -jar /home/linuxadmin/opod/jacoco/lib/jacococli.jar dump --destfile /home/linuxadmin/opod/opod_runtime/jacoco_flink.exec --port 6306
+      ignore_errors: yes
+
+    - name: get jacoco data1
+      fetch:
+        src: /home/linuxadmin/opod/opod_runtime/jacoco_api_service.exec
+        dest: ../opod_source/
+        flat: yes
+
+    - name: get jacoco data2
+      fetch:
+        src: /home/linuxadmin/opod/opod_runtime/jacoco_api_gateway.exec
+        dest: ../opod_source/
+        flat: yes
+
+    - name: get jacoco data3
+      fetch:
+        src: /home/linuxadmin/opod/opod_runtime/jacoco_flink.exec
+        dest: ../opod_source/
+        flat: yes
+        
+    - name: get classfile source1
+      fetch:
+        src: /home/linuxadmin/opod/opod_deploy/product/env/shared/external_module/opod_api_service/origin/opod_api_service.jar
+        dest: ../opod_source/
+        flat: yes
+        
+    - name: get classfile source2
+      fetch:
+        src: /home/linuxadmin/opod/opod_deploy/product/env/shared/external_module/opod_api_gateway/origin/gateway.jar
+        dest: ../opod_source/
+        flat: yes
+
+    - name: get classfile source3-1
+      fetch:
+        src: /home/linuxadmin/opod/opod_deploy/product/env/shared/external_module/flink/opod-realtime-match-all.jar 
+        dest: ../opod_source/
+        flat: yes
+
+    - name: get classfile source3-2
+      fetch:
+        src: /home/linuxadmin/opod/opod_deploy/product/env/shared/external_module/flink/opod-realtime-statistic-all.jar
+        dest: ../opod_source/
+        flat: yes
+
+    - name: get classfile source3-3
+      fetch:
+        src: /home/linuxadmin/opod/opod_deploy/product/env/shared/external_module/flink/opod-tactic-early-warning-realtime-all.jar 
+        dest: ../opod_source/
+        flat: yes
+
+    - name: get classfile source3-4
+      fetch:
+        src: /home/linuxadmin/opod/opod_deploy/product/env/shared/external_module/flink/suspense_terrorist_realtime_match-all.jar 
+        dest: ../opod_source/
+        flat: yes
+
+    - name: get classfile source3-5
+      fetch:
+        src: /home/linuxadmin/opod/opod_deploy/product/env/shared/external_module/flink/opod-realtime-mac-all.jar
+        dest: ../opod_source/
+        flat: yes

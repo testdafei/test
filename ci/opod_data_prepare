@@ -1,0 +1,78 @@
+#!/usr/bin/env groovy
+
+//自动化运行环境 python 3.6.3
+
+//py-rt-server是公共的访问pypi库的artifactory server id，无须修改
+def server = Artifactory.server "py-rt-server"
+def buildInfo
+def branch_build
+
+pipeline {
+    agent {
+        node {
+            label 'opod-build-1404'
+            customWorkspace 'workspace/OPOD_test'
+        }
+    }
+    tools {
+        jdk 'JDK8'
+    }
+    options {
+        gitLabConnection('yitu-gitlab')
+        // disableConcurrentBuilds()
+        timeout(time: 300, unit: 'MINUTES')
+    }
+    environment {
+        HANDLED_JOB_NAME = ''
+        token = 'a6304b03ea6711f3ba25c2f10567802e9110e406e5af8763c0fe117db2fb1adf'
+    }
+    parameters {
+        string(name: 'fp_ip', defaultValue: '10.40.40.187', description: 'OPOD对应的FP服务器')
+        string(name: 'user_name', defaultValue: 'admin', description: 'OPOD对应的FP用户名')
+        string(name: 'password', defaultValue: 'admin123', description: 'OPOD对应的FP密码')
+        string(name: 'fp_cluster_id', defaultValue: 'FP1.9.4_1545113906', description: 'OPOD对应的FP cluster id')
+        string(name: 'opod_ip', defaultValue: '10.40.56.69', description: '需要运行自动化的OPOD服务器')
+        string(name: 'mode', defaultValue: 'DailyRun', description: '自动化运行方式，可选项： BVT  or  DailyRun')
+        string(name: 'testcase_file', defaultValue: 'tests/', description: '自动化case对应的目录，默认是tests/目录下的case全跑，该参数的目的是为了可以单独调试新增的case')
+    }
+
+    stages {
+        stage('Install polita3 dependency') {
+            steps {
+                script {
+                    sh """
+                        java -version
+                        if [ ! -e ~/polita3_env ] ; then
+                            python3 -m pip install virtualenv --user
+                            virtualenv -p python3 ~/polita3_env
+                        fi
+                        source ~/polita3_env/bin/activate
+                        pip install polita==3.0.1
+                    """
+                }
+            }
+        }
+        stage('opod prepare data') {
+            steps {
+                script {
+                    sh """
+                        source ~/polita3_env/bin/activate
+
+                        cd httpapi/
+
+                        #delete allure report before
+                        rm -rf ./allure
+
+                        #generate api
+                        ./update_openapi_client.sh
+
+                        #run opod data prepare(fetch static repository, cluster data)
+                        pytest -s -v prepare 
+
+                    """
+                }
+            }
+        }
+
+    }
+}

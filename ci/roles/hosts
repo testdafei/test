@@ -1,0 +1,5 @@
+---
+ [opod]
+ opod_ip ansible_ssh_user=opod_username ansible_ssh_pass=opod_password
+
+ [opod:vars]

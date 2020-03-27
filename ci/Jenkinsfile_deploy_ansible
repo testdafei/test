@@ -1,0 +1,88 @@
+#!/usr/bin/env groovy
+
+pipeline {
+    agent {
+        node {
+            label 'opod-build-1404'
+            customWorkspace 'workspace/OPOD_ansible_deploy'
+        }
+    }
+    options {
+        gitLabConnection('yitu-gitlab')
+        disableConcurrentBuilds()
+    }
+    environment {
+        HANDLED_JOB_NAME = ''
+        token = 'a6304b03ea6711f3ba25c2f10567802e9110e406e5af8763c0fe117db2fb1adf'
+    }
+    parameters {       
+        string(name: 'url', defaultValue: '... ...', description: '包地址')      
+    }
+    stages {
+        stage('Prepare') {
+            steps {
+                writeFile file: 'roles/hosts', text: params.HOSTS
+                script {
+                    HANDLED_JOB_NAME = "${env.JOB_NAME}".replace("%2F", "/")
+                }
+                echo "${HANDLED_JOB_NAME}"
+            }
+        }
+        stage('prepare virtual env') {
+            options {
+                gitlabCommitStatus(name: 'prepare env');
+            }
+            steps {
+                script {
+                    if (fileExists('.env')) {
+
+                        echo 'Activate virtual env...'
+                        sh """
+                            . .env/bin/activate
+                            pip install --upgrade setuptools
+                            pip install ansible==2.5
+                        """
+                    }
+                    else {
+                        echo 'Creating virtual env ...'
+                        sh """
+                            virtualenv .env
+                            . .env/bin/activate
+                            pip install --upgrade setuptools
+                            pip install ansible==2.5
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('ansible deploy') {
+            steps {
+                script {
+                    echo "prepare data & run http tests ... "
+                    sh """
+                        . .env/bin/activate
+                        cd roles
+                        sed -i 's;666666;${params.url};g' opod-deploy/vars/main.yaml
+                        export ANSIBLE_HOST_KEY_CHECKING=False
+                        ansible-playbook -i hosts opod-deploy.yaml
+                        cd -
+                        deactivate
+                    """
+                }                
+            }
+        }
+    }
+    post {
+        always {
+            script {
+                echo "Send build result by dingding"
+                sh """
+                cd ${WORKSPACE}
+                source ../dingdang/bin/activate
+                    dingdang --path ${HANDLED_JOB_NAME} --token ${token}
+                """
+            }
+        }
+    }
+}

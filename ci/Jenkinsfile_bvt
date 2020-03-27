@@ -1,0 +1,81 @@
+#!/usr/bin/env groovy
+
+pipeline {
+    agent {
+        node {
+            label 'opod-build-1404'
+            customWorkspace 'workspace/OPOD_BVT'
+        }
+    }
+    options {
+        gitLabConnection('yitu-gitlab')
+        disableConcurrentBuilds()
+    }
+    environment {
+        HANDLED_JOB_NAME = ''
+        token = 'a6304b03ea6711f3ba25c2f10567802e9110e406e5af8763c0fe117db2fb1adf'
+    }
+    parameters {
+        string(name: 'fp_ip', defaultValue: '10.10.25.56', description: '部署 FP 的机器 ip')        
+    }
+    stages {
+        stage('Prepare') {
+            steps {
+                script {
+                    HANDLED_JOB_NAME = "${env.JOB_NAME}".replace("%2F", "/")
+                }
+                echo "${HANDLED_JOB_NAME}"
+            }
+        }
+        stage('prepare virtual env') {
+            options {
+                gitlabCommitStatus(name: 'prepare env');
+            }
+            steps {
+                script {
+                    if (fileExists('.env')) {
+                        echo 'Deleting virtual env...'
+                        sh """
+                            rm .env -rf
+                        """
+                    }
+                    echo 'Creating virtual env ...'
+                    sh """
+                        virtualenv --no-site-packages --python=python2.7 .env
+                        . .env/bin/activate
+                        pip install -r requirement.txt
+                    """
+                }
+            }
+        }
+
+        stage('run BVT') {
+            steps {
+                script {
+                    def server_ip = params.opod_ip
+                    echo "prepare data & run http tests ... "
+                    sh """
+                        . .env/bin/activate
+                        cd setting_page
+                        python backend_setting.py
+                        cd -
+                        deactivate
+                    """
+                }
+                
+            }
+        }
+    }
+    post {
+        always {
+            script {
+                echo "Send build result by dingding"
+                sh """
+                cd ${WORKSPACE}
+                source ../dingdang/bin/activate
+                    dingdang --path ${HANDLED_JOB_NAME} --token ${token}
+                """
+            }
+        }
+    }
+}

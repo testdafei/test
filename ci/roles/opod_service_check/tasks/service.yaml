@@ -1,0 +1,22 @@
+- name: check pods whether come up
+  # wait_for:
+  #   port={{ item }}
+  #   state=started
+  #   msg='wait for port start'
+  #   timeout=600
+  # with_items:
+  #   - "{{ port_to_start }}"
+  # ignore_errors: no
+  # - name: wait for pods to come up
+  shell: kubectl get deploy
+  register: kubectl_get_pods
+  until: kubectl_get_pods.stdout.find("0/1")== -1
+  retries: 60
+  delay: 10
+
+
+
+
+
+
+

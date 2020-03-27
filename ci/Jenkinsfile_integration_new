@@ -1,0 +1,109 @@
+#!/usr/bin/env groovy
+
+pipeline {
+    agent {
+        node {
+            label 'OPOD-Build-CI'
+            customWorkspace 'workspace/OPOD_integration_test'
+        }
+    }
+    options {
+        gitLabConnection('yitu-gitlab')
+        disableConcurrentBuilds()
+    }
+    // triggers {
+        // trigger job at every day 22:00
+        // cron('H 22 * * *')
+    // }
+    environment {
+        HANDLED_JOB_NAME = ''
+        token = 'a6304b03ea6711f3ba25c2f10567802e9110e406e5af8763c0fe117db2fb1adf'
+    }
+    parameters {
+        string(name: 'stage', defaultValue: 'integration_test', description: 'integration test')
+        string(name: 'opod_ip', defaultValue: '10.40.40.184', description: '部署 OPOD 的机器 ip')        
+        // string(name: 'opod_user', defaultValue: 'linuxadmin', description: '部署 OPOD 的机器 用户名')        
+    }
+    stages {
+        stage('Prepare') {
+            steps {
+                script {
+                    HANDLED_JOB_NAME = "${env.JOB_NAME}".replace("%2F", "/")
+                }
+                echo "${HANDLED_JOB_NAME}"
+            }
+        }
+        stage('prepare virtual env') {
+            options {
+                gitlabCommitStatus(name: 'prepare env');
+            }
+            steps {
+                script {
+                    if (fileExists('.env')) {
+                        echo 'Deleting virtual env...'
+                        sh """
+                            rm .env -rf
+                        """
+                    }
+                    echo 'Creating virtual env ...'
+                    sh """
+                        virtualenv --no-site-packages --python=python2.7 .env
+                        . .env/bin/activate
+                        pip install pytest
+                        pip install polita --extra-index-url https://nexus.yitu-inc.com/repository/pypi-yitu/simple
+                    """
+                }
+            }
+        }
+
+        stage('run http tests') {
+            steps {
+                script {
+                    def server_ip = params.opod_ip
+                    echo "prepare data & run http tests ... "
+                    sh """
+                        . .env/bin/activate
+                        cd test/integration_test/online_test/polita/
+                        rm -rf ../../../allurereport
+                        sed -i 's/aaaaaa/${server_ip}/g' deployment/topology/face/singleNode.yml
+                        cat deployment/topology/face/singleNode.yml
+                        pytest tests/opod/functest/ -s -q --alluredir ../../../allurereport
+                    """
+                }
+                
+            }
+        }
+    }
+    post {
+        always {
+            echo "Deleting virtual env..."
+            echo "collecting report for allure report(http test)..."
+            allure includeProperties: false, jdk: '', results: [[path: 'test/allurereport']]
+            script {
+                echo "Send build result by dingding"
+                sh """
+                source ~/.env/bin/activate
+                    dingdang --path ${HANDLED_JOB_NAME} --token ${token}
+                """
+            }
+        }
+        success {
+            emailext (
+                to: "opod-dev@yitu-inc.com",
+                subject: "SUCCESSFUL: Job '${HANDLED_JOB_NAME} [${env.BUILD_NUMBER}]'",
+                body: """<p>SUCCESSFUL: Job '${HANDLED_JOB_NAME} [${env.BUILD_NUMBER}]':</p>
+                    <p>Check console output at <a href='${env.BUILD_URL}'>${HANDLED_JOB_NAME} [${env.BUILD_NUMBER}]</a></p>""",
+                recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+                )
+        }
+        failure {
+            emailext (
+                to: "opod-dev@yitu-inc.com",
+                subject: "FAILED: Job '${HANDLED_JOB_NAME} [${env.BUILD_NUMBER}]'",
+                body: """<p>FAILED: Job '${HANDLED_JOB_NAME} [${env.BUILD_NUMBER}]':</p>
+                    <p>Check console output at <a href='${env.BUILD_URL}'>${HANDLED_JOB_NAME} [${env.BUILD_NUMBER}]</a></p>""",
+                recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+                )
+        }
+    }
+}
