@@ -1,5 +1,8 @@
 #!/usr/bin/env groovy
 
+//自动化运行环境 python 3.6.3
+
+//py-rt-server是公共的访问pypi库的artifactory server id，无须修改
 
 def rtMaven = Artifactory.newMavenBuild()
 def server = Artifactory.server "py-rt-server"
@@ -30,6 +33,26 @@ pipeline {
         string(name: 'opod_deploy_path', defaultValue: '/home/linuxadmin/yitu', description: '部署opod的路径')
         string(name: 'testcase_file', defaultValue: 'tests/', description: '自动化case对应的目录，默认是tests/目录下的case全跑，该参数的目的是为了可以单独调试新增的case')
     }
+
+    stages {
+        
+
+        stage('Install polita3 dependency') {
+            steps {
+                script {
+                    sh """
+                        java -version
+                        if [ ! -e ~/polita3_env ] ; then
+                            python3 -m pip install virtualenv --user
+                            virtualenv -p python3 ~/polita3_env
+                        fi
+                        source ~/polita3_env/bin/activate
+                        pip install polita==3.0.1
+                    """
+                }
+            }
+        }
+
         stage('Polita run tests') {
             steps {
                 script {
