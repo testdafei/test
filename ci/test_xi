@@ -18,7 +18,7 @@ pipeline {
         gitLabConnection('yitu-gitlab')
         disableConcurrentBuilds()
         timeout(time: 300, unit: 'MINUTES')
-        ansiColor('xterm')
+        
     }
     environment {
         HANDLED_JOB_NAME = ''
