@@ -1,0 +1,138 @@
+#!/usr/bin/env groovy
+
+
+def rtMaven = Artifactory.newMavenBuild()
+def server = Artifactory.server "py-rt-server"
+def buildInfo
+def branch_build
+
+pipeline {
+    agent any
+    tools {
+        jdk 'JDK8'
+    }
+    options {
+        gitLabConnection('yitu-gitlab')
+        disableConcurrentBuilds()
+        timeout(time: 300, unit: 'MINUTES')
+        ansiColor('xterm')
+    }
+    environment {
+        HANDLED_JOB_NAME = ''
+        REPORT_URL=''
+        token = 'a6304b03ea6711f3ba25c2f10567802e9110e406e5af8763c0fe117db2fb1adf'
+    }
+    parameters {
+        string(name: 'fp_ip', defaultValue: '10.40.40.187', description: 'OPOD对应的FP服务器')
+        string(name: 'opod_ip', defaultValue: '10.40.56.69', description: '需要运行自动化的OPOD服务器')
+        string(name: 'opod_username', defaultValue: 'linuxadmin', description: '被部署机器的用户名')
+        string(name: 'opod_password', defaultValue: 'Hello=111!', description: '被部署机器的用户名对应的密码')
+        string(name: 'opod_deploy_path', defaultValue: '/home/linuxadmin/yitu', description: '部署opod的路径')
+        string(name: 'testcase_file', defaultValue: 'tests/', description: '自动化case对应的目录，默认是tests/目录下的case全跑，该参数的目的是为了可以单独调试新增的case')
+    }
+        stage('Polita run tests') {
+            steps {
+                script {
+                    sh """
+                        source ~/polita3_env/bin/activate
+                        pip install xlrd
+                        pip install xlwt
+
+                        cd httpapi/
+
+                        #delete allure report before
+                        rm -rf ./allure
+
+                        #run tests
+                        ./update_openapi_client.sh
+                        pytest -s -v --opod_host http://${params.opod_ip}:30070 --fp_host http://${params.fp_ip}:11180 ${params.testcase_file} --alluredir=./allure --junitxml=reports/OPOD-api-test.xml
+
+                    """
+                }
+            }
+            post {
+                always {
+                    echo "collecting report"
+                    allure includeProperties: false, jdk: 'JDK8', results: [[path: 'httpapi/allure']]
+
+                }
+            }
+        }
+
+        stage('collect api test meta'){
+            steps {
+                script{
+                    junit 'httpapi/reports/OPOD-api-test.xml'
+                    def result = manager.build.getAction(hudson.tasks.junit.TestResultAction.class).result
+                    def passRate = result.getPassCount()/result.getTotalCount()
+                    println "total test case:" + result.getTotalCount()
+                    println "passed test case:" + result.getPassCount()
+                    println "passRate:" + passRate
+                    utReport = "${env.JOB_URL}" + "${env.BUILD_NUMBER}" + "/allure/"
+                    rtMaven.deployer.addProperty("test.api.case", "https://confluence.yitu-inc.com/pages/viewpage.action?pageId=320735643")
+                            .addProperty("test.api.report", utReport.toString())
+                            .addProperty("test.api.passrate", passRate.toString())
+                            .addProperty("test.api.testtool", "junit")
+                }
+            }
+        }
+        stage('generate jacoco data') {
+            steps {
+                script {
+                    catchError(buildResult:'SUCCESS',stageResult:'FAILURE'){
+                        sh """
+                        . .env/bin/activate
+                        cd ci
+                        rm -rf opod_source
+                        mkdir opod_source
+                        sed -i 's;opod_ip;${params.opod_ip};g' roles/hosts
+                        sed -i 's;opod_username;${params.opod_username};g' roles/hosts
+                        sed -i 's;opod_password;${params.opod_password};g' roles/hosts
+                        export ANSIBLE_STDOUT_CALLBACK=yaml
+                        export ANSIBLE_FORCE_COLOR=true
+                        export ANSIBLE_HOST_KEY_CHECKING=False
+                        ansible-playbook -v -i roles/hosts roles/opod_service_jacoco.yaml
+                        cd -
+                        deactivate
+                        """
+                    }
+                }
+            }
+        }
+        stage('collect jacoco report') {
+            steps {
+                echo 'collect jacoco report...'
+                script {
+                    catchError(buildResult:'SUCCESS',stageResult:'FAILURE'){
+                        sh """
+                        cd ci/opod_source/
+                        mkdir opod_api_service
+                        mkdir opod_api_gateway
+                        mkdir flink
+                        mv opod-realtime-match-all.jar ./flink
+                        mv opod-tactic-early-warning-realtime-all.jar ./flink
+                        mv suspense_terrorist_realtime_match-all.jar ./flink
+                        mv opod-realtime-mac-all.jar ./flink
+                        mv opod-realtime-statistic-all.jar ./flink
+                        mv opod_api_service.jar ./opod_api_service
+                        mv gateway.jar ./opod_api_gateway
+                        cd opod_api_service
+                        jar xvf opod_api_service.jar
+                        cd ../opod_api_gateway
+                        jar xvf gateway.jar
+                        cd ../flink
+                        jar xvf opod-realtime-match-all.jar
+                        jar xvf opod-tactic-early-warning-realtime-all.jar
+                        jar xvf suspense_terrorist_realtime_match-all.jar
+                        jar xvf opod-realtime-mac-all.jar
+                        jar xvf opod-realtime-statistic-all.jar
+
+                        """
+                        jacoco execPattern: '**/ci/opod_source/**.exec',classPattern: '**/ci/opod_source/opod_api_service/**，**/ci/opod_source/opod_api_gateway/**,**/ci/opod_source/flink/com/'
+                    }
+                    echo 'jacoco report has been collected.'
+                }
+            }
+        }
+    }
+}
