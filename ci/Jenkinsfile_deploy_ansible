@@ -1,12 +1,7 @@
 #!/usr/bin/env groovy
 
 pipeline {
-    agent {
-        node {
-            label 'opod-build-1404'
-            customWorkspace 'workspace/OPOD_ansible_deploy'
-        }
-    }
+    agent any
     options {
         gitLabConnection('yitu-gitlab')
         disableConcurrentBuilds()
