@@ -11,12 +11,7 @@ def buildInfo
 def branch_build
 
 pipeline {
-    agent {
-        node {
-            label 'opod-build-1404'
-            customWorkspace 'workspace/OPOD_test'
-        }
-    }
+    agent any
     tools {
         jdk 'JDK8'
     }
